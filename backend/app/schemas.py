@@ -16,15 +16,18 @@ class FolderUpdate(BaseModel):
 class BookmarkCreate(BaseModel):
     url: HttpUrl
     folder_ids: Optional[List[int]] = None
+    tweet_text: Optional[str] = None
 
 class BookmarkUpdate(BaseModel):
     folder_ids: Optional[List[int]] = None
+    tweet_text: Optional[str] = None
 
 class Bookmark(BaseModel):
     id: int
     url: HttpUrl
     created_at: datetime
     folder_ids: List[int]
+    tweet_text: Optional[str] = None
 
 class LinkPreview(BaseModel):
     url: HttpUrl

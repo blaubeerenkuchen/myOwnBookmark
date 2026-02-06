@@ -18,15 +18,20 @@ export default function App() {
   const lastClipboardRef = useRef("");
   const autoPasteUsedRef = useRef(false);
   const [autoPasted, setAutoPasted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
   async function loadFolders() {
     const res = await fetch("/api/folders");
     setFolders(await res.json());
   }
 
-  async function loadBookmarks(folderId = null) {
-    const q = folderId ? `?folder_id=${folderId}` : "";
-    const res = await fetch(`/api/bookmarks${q}`);
+  async function loadBookmarks(folderId = null, query = "") {
+    const params = new URLSearchParams();
+    if (folderId) params.set("folder_id", String(folderId));
+    if (query) params.set("q", query);
+    const qs = params.toString();
+    const res = await fetch(`/api/bookmarks${qs ? `?${qs}` : ""}`);
     setBookmarks(await res.json());
   }
 
@@ -45,12 +50,12 @@ export default function App() {
     setAutoPasted(false);
     lastSaveAtRef.current = Date.now();
     setSelectedFolderIds([]);
-    await loadBookmarks(activeFolder);
+    await loadBookmarks(activeFolder, searchQuery);
   }
 
   async function deleteBookmark(id) {
     await fetch(`/api/bookmarks/${id}`, { method: "DELETE" });
-    await loadBookmarks(activeFolder);
+    await loadBookmarks(activeFolder, searchQuery);
   }
 
   function openFolderModal(bookmark) {
@@ -71,7 +76,7 @@ export default function App() {
       body: JSON.stringify({ folder_ids: folderModalIds }),
     });
     closeFolderModal();
-    await loadBookmarks(activeFolder);
+    await loadBookmarks(activeFolder, searchQuery);
   }
 
   async function addFolder(e) {
@@ -130,7 +135,7 @@ export default function App() {
     }
     closeDeleteModal();
     await loadFolders();
-    await loadBookmarks(activeFolder === deleteModal.id ? null : activeFolder);
+    await loadBookmarks(activeFolder === deleteModal.id ? null : activeFolder, searchQuery);
   }
 
   async function tryPasteFromClipboard() {
@@ -311,7 +316,35 @@ export default function App() {
         </div>
 
         <div className="row">
-          <div className="card section" style={{ width: 320 }}>
+          <div style={{ width: 320, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="card section">
+              <div className="section-title">
+                <span>🔎</span>
+                검색
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  loadBookmarks(activeFolder, searchQuery);
+                  setHasSearched(true);
+                }}
+                style={{ display: "flex", gap: 8 }}
+              >
+                <input
+                  style={{ flex: 1, padding: "0 12px", height: 40, borderRadius: 10, border: "1px solid var(--border)" }}
+                  placeholder="트윗 텍스트 검색"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSearchQuery(next);
+                  }}
+                />
+                <button className="btn primary" type="submit" style={{ height: 40, minWidth: 80, padding: "0 14px" }}>
+                  검색
+                </button>
+              </form>
+            </div>
+            <div className="card section">
             <div className="section-title">
               <span>📂</span>
               폴더
@@ -334,7 +367,7 @@ export default function App() {
                   className="tiny-btn"
                   onClick={() => {
                     setActiveFolder(null);
-                    loadBookmarks();
+                    loadBookmarks(null, searchQuery);
                   }}
                 >
                   모든 북마크
@@ -347,11 +380,11 @@ export default function App() {
                   <button
                     type="button"
                     className="tiny-btn"
-                    onClick={() => {
-                      setActiveFolder(f.id);
-                      loadBookmarks(f.id);
-                    }}
-                  >
+                  onClick={() => {
+                    setActiveFolder(f.id);
+                    loadBookmarks(f.id, searchQuery);
+                  }}
+                >
                     {f.name}{f.is_default ? " (기본)" : ""}
                   </button>
                   <span className="badge">{countsByFolder[f.id] || 0}</span>
@@ -379,12 +412,28 @@ export default function App() {
                 </div>
               </form>
             )}
+            </div>
           </div>
 
           <div className="card section" style={{ flex: 1 }}>
-            <div className="section-title">
-              <span>🔖</span>
-              북마크 ({bookmarks.length})
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div className="section-title" style={{ marginBottom: 0 }}>
+                <span>🔖</span>
+                북마크 ({bookmarks.length})
+              </div>
+              {hasSearched && (
+                <button
+                  className="tiny-btn"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setHasSearched(false);
+                    loadBookmarks(activeFolder, "");
+                  }}
+                >
+                  초기화
+                </button>
+              )}
             </div>
 
             {bookmarks.length === 0 ? (

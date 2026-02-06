@@ -1,49 +1,71 @@
-﻿from fastapi import APIRouter, HTTPException
+﻿from fastapi import APIRouter, HTTPException, Depends
 from typing import List
+from sqlalchemy.orm import Session
 
 from ..schemas import Folder, FolderCreate, FolderUpdate, Bookmark
-from .. import storage
+from ..db import get_db
+from .. import models
 
 router = APIRouter(prefix="/api")
 
+
+def folder_to_schema(f: models.Folder) -> Folder:
+    return Folder(id=f.id, name=f.name, is_default=f.is_default)
+
+
+def bookmark_to_schema(b: models.Bookmark) -> Bookmark:
+    return Bookmark(
+        id=b.id,
+        url=b.url,
+        created_at=b.created_at,
+        folder_ids=[f.id for f in b.folders],
+        tweet_text=b.tweet_text,
+    )
+
+
 @router.get("/folders", response_model=List[Folder])
-def list_folders():
-    return storage.folders
+def list_folders(db: Session = Depends(get_db)):
+    items = db.query(models.Folder).order_by(models.Folder.id.asc()).all()
+    return [folder_to_schema(f) for f in items]
+
 
 @router.post("/folders", response_model=Folder)
-def create_folder(payload: FolderCreate):
+def create_folder(payload: FolderCreate, db: Session = Depends(get_db)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Folder name is required")
-    if any(f.name == name for f in storage.folders):
+    exists = db.query(models.Folder).filter(models.Folder.name == name).first()
+    if exists:
         raise HTTPException(status_code=409, detail="Folder name already exists")
-    folder = Folder(id=storage.next_folder_id, name=name, is_default=False)
-    storage.next_folder_id += 1
-    storage.folders.append(folder)
-    return folder
+    folder = models.Folder(name=name, is_default=False)
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return folder_to_schema(folder)
+
 
 @router.patch("/folders/{folder_id}", response_model=Folder)
-def update_folder(folder_id: int, payload: FolderUpdate):
+def update_folder(folder_id: int, payload: FolderUpdate, db: Session = Depends(get_db)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Folder name is required")
-    if any(f.name == name and f.id != folder_id for f in storage.folders):
+    folder = db.query(models.Folder).filter(models.Folder.id == folder_id).first()
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    if folder.is_default:
+        raise HTTPException(status_code=400, detail="Default folder cannot be renamed")
+    exists = db.query(models.Folder).filter(models.Folder.name == name, models.Folder.id != folder_id).first()
+    if exists:
         raise HTTPException(status_code=409, detail="Folder name already exists")
-    for idx, f in enumerate(storage.folders):
-        if f.id == folder_id:
-            if f.is_default:
-                raise HTTPException(status_code=400, detail="Default folder cannot be renamed")
-            storage.folders[idx] = Folder(id=f.id, name=name, is_default=f.is_default)
-            return storage.folders[idx]
-    raise HTTPException(status_code=404, detail="Folder not found")
+    folder.name = name
+    db.commit()
+    db.refresh(folder)
+    return folder_to_schema(folder)
+
 
 @router.delete("/folders/{folder_id}")
-def delete_folder(folder_id: int, mode: str = "keep"):
-    """
-    mode=keep  -> remove folder only, keep bookmarks
-    mode=delete -> delete bookmarks linked to this folder
-    """
-    folder = next((f for f in storage.folders if f.id == folder_id), None)
+def delete_folder(folder_id: int, mode: str = "keep", db: Session = Depends(get_db)):
+    folder = db.query(models.Folder).filter(models.Folder.id == folder_id).first()
     if folder is None:
         raise HTTPException(status_code=404, detail="Folder not found")
     if folder.is_default:
@@ -51,20 +73,31 @@ def delete_folder(folder_id: int, mode: str = "keep"):
     if mode not in ("keep", "delete"):
         raise HTTPException(status_code=400, detail="mode must be keep or delete")
 
-    if mode == "delete":
-        storage.bookmarks = [b for b in storage.bookmarks if folder_id not in b.folder_ids]
-    else:
-        for i, b in enumerate(storage.bookmarks):
-            if folder_id in b.folder_ids:
-                updated_folder_ids = [fid for fid in b.folder_ids if fid != folder_id]
-                if len(updated_folder_ids) == 0:
-                    updated_folder_ids = [f.id for f in storage.folders if f.is_default]
-                storage.bookmarks[i] = Bookmark(
-                    id=b.id,
-                    url=b.url,
-                    created_at=b.created_at,
-                    folder_ids=updated_folder_ids,
-                )
+    default_folder = db.query(models.Folder).filter(models.Folder.is_default == True).first()
 
-    storage.folders[:] = [f for f in storage.folders if f.id != folder_id]
+    if mode == "delete":
+        bookmarks = (
+            db.query(models.Bookmark)
+            .join(models.Bookmark.folders)
+            .filter(models.Folder.id == folder_id)
+            .all()
+        )
+        for b in bookmarks:
+            db.delete(b)
+        db.commit()
+    else:
+        bookmarks = (
+            db.query(models.Bookmark)
+            .join(models.Bookmark.folders)
+            .filter(models.Folder.id == folder_id)
+            .all()
+        )
+        for b in bookmarks:
+            b.folders = [f for f in b.folders if f.id != folder_id]
+            if len(b.folders) == 0 and default_folder is not None:
+                b.folders = [default_folder]
+        db.commit()
+
+    db.delete(folder)
+    db.commit()
     return {"status": "ok"}
