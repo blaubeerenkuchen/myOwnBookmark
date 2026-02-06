@@ -20,6 +20,8 @@ export default function App() {
   const [autoPasted, setAutoPasted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [showFolderPanel, setShowFolderPanel] = useState(false);
 
   async function loadFolders() {
     const res = await fetch("/api/folders");
@@ -222,12 +224,16 @@ export default function App() {
         :root { --blue: #2d63ff; --blue-soft: #e9f0ff; --card: #ffffff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b; }
         * { box-sizing: border-box; }
         body { margin: 0; }
-        .app-wrap { max-width: 1100px; margin: 0 auto; padding: 28px 24px 48px; font-family: 'Noto Sans KR', 'Montserrat', sans-serif; color: var(--text); }
+        .app-wrap { max-width: 960px; margin: 0 auto; padding: 28px 24px 48px; font-family: 'Noto Sans KR', 'Montserrat', sans-serif; color: var(--text); }
         .title { text-align: center; font-family: 'Montserrat', 'Noto Sans KR', sans-serif; font-size: 32px; font-weight: 700; color: #1770e6; margin-bottom: 4px; }
         .subtitle { text-align: center; color: var(--muted); margin-bottom: 24px; }
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
-        .input-card { padding: 18px; margin-bottom: 22px; }
-        .row { display: flex; gap: 18px; }
+        .input-card { padding: 18px; margin-bottom: 22px; width: 100%; }
+        .row { display: flex; gap: 18px; width: 100%; align-items: flex-start; }
+        .left-col { position: sticky; top: 24px; align-self: flex-start; width: 320px; }
+        .right-col { flex: 1; }
+        .mobile-toggles { display: none; }
+        .left-panels { display: flex; flex-direction: column; gap: 12px; }
         .input-row { display: flex; gap: 12px; }
         .input { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; }
         .input input { border: none; outline: none; background: transparent; width: 100%; font-size: 14px; }
@@ -241,15 +247,38 @@ export default function App() {
         .section { padding: 18px; }
         .section-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; margin-bottom: 12px; }
         .folder-list { display: grid; gap: 8px; }
-        .folder-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid transparent; }
+        .folder-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #f8fafc; border: 1px solid transparent; }
         .folder-item.active { border-color: var(--blue); background: var(--blue-soft); }
         .folder-actions { display: flex; gap: 6px; }
         .tiny-btn { border: none; padding: 6px 8px; border-radius: 8px; cursor: pointer; background: #edf2ff; color: #334155; font-size: 12px; }
+        .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 22px; padding: 0 8px; border-radius: 999px; background: #e2e8f0; color: #1e293b; font-size: 11px; margin-left: auto; }
         .bookmark-list { display: grid; gap: 12px; }
         .bookmark-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
         .bookmark-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
         .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: #eef2ff; color: #334155; font-size: 12px; }
         .bottom-help { position: fixed; right: 18px; bottom: 18px; width: 36px; height: 36px; border-radius: 999px; background: #fff; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(15, 23, 42, 0.1); }
+        @media (max-width: 600px) {
+          .row { flex-direction: column; }
+          .left-col { position: static; width: 100%; }
+          .right-col { width: 100%; max-width: 100%; }
+          .mobile-toggles { display: flex; gap: 8px; margin-bottom: 8px; }
+          .left-panels { display: none; }
+          .left-panels.open { display: flex; }
+          .bookmark-card iframe,
+          .bookmark-card .twitter-tweet { max-width: 100% !important; }
+        }
+        @media (max-width: 480px) {
+          .app-wrap { max-width: 100%; padding: 18px 14px 40px; }
+          .title { font-size: 24px; }
+          .subtitle { font-size: 13px; margin-bottom: 16px; }
+          .input-row { flex-direction: column; }
+          .btn.primary { width: 100%; }
+          .chips { gap: 6px; }
+          .chip { font-size: 12px; padding: 7px 10px; }
+          .bookmark-card { padding: 10px; }
+          .bookmark-actions { justify-content: flex-start; flex-wrap: wrap; }
+          .bottom-help { right: 12px; bottom: 12px; }
+        }
         .muted { color: var(--muted); font-size: 13px; }
       `}</style>
 
@@ -316,8 +345,25 @@ export default function App() {
         </div>
 
         <div className="row">
-          <div style={{ width: 320, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="card section">
+          <div className="left-col">
+            <div className="mobile-toggles">
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => setShowSearchPanel((v) => !v)}
+              >
+                검색 {showSearchPanel ? "닫기" : "열기"}
+              </button>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => setShowFolderPanel((v) => !v)}
+              >
+                폴더 {showFolderPanel ? "닫기" : "열기"}
+              </button>
+            </div>
+            <div className={`left-panels ${showSearchPanel ? "open" : ""}`}>
+              <div className="card section">
               <div className="section-title">
                 <span>🔎</span>
                 검색
@@ -343,8 +389,11 @@ export default function App() {
                   검색
                 </button>
               </form>
+              </div>
             </div>
-            <div className="card section">
+
+            <div className={`left-panels ${showFolderPanel ? "open" : ""}`}>
+              <div className="card section">
             <div className="section-title">
               <span>📂</span>
               폴더
@@ -357,7 +406,7 @@ export default function App() {
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
               />
-              <button className="btn primary" type="submit">+</button>
+              <button className="btn primary" type="submit" style={{ height: 40, minWidth: 80, padding: "0 14px" }}>추가</button>
             </form>
 
             <div className="folder-list">
@@ -412,10 +461,11 @@ export default function App() {
                 </div>
               </form>
             )}
+              </div>
             </div>
           </div>
 
-          <div className="card section" style={{ flex: 1 }}>
+          <div className="card section right-col">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div className="section-title" style={{ marginBottom: 0 }}>
                 <span>🔖</span>
@@ -483,7 +533,13 @@ export default function App() {
         </div>
       </div>
 
-      <div className="bottom-help">?</div>
+      <button
+        type="button"
+        className="bottom-help"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      >
+        ↑
+      </button>
 
       {deleteModal.open && (
         <div
@@ -496,8 +552,8 @@ export default function App() {
             justifyContent: "center",
           }}
         >
-          <div style={{ background: "white", padding: 16, width: 320, borderRadius: 12 }}>
-            <h3>Delete folder</h3>
+          <div style={{ background: "white", padding: 16, width: 420, borderRadius: 12 }}>
+            <h3>폴더 삭제</h3>
             <p style={{ fontSize: 14 }}>
               Folder: <strong>{deleteModal.name}</strong>
             </p>
@@ -509,7 +565,7 @@ export default function App() {
                   checked={deleteMode === "keep"}
                   onChange={() => setDeleteMode("keep")}
                 />{" "}
-                Delete folder only (keep bookmarks)
+                폴더만 삭제하기(북마크 유지)
               </label>
               <label>
                 <input
@@ -518,7 +574,7 @@ export default function App() {
                   checked={deleteMode === "delete"}
                   onChange={() => setDeleteMode("delete")}
                 />{" "}
-                Delete folder and bookmarks
+                폴더와 북마크 모두 삭제
               </label>
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
