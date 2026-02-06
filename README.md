@@ -5,7 +5,7 @@
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r backend\requirements.txt
-uvicorn backend.app.main:app --reload
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Frontend
