@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 frontend/node_modules/
 MOB 기획안.md
+app.db
